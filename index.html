@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Note App</title>
+<script src="https://cdn.tailwindcss.com"></script>
+
+<style>
+.violet { color:#7c3aed; }
+:root {
+  --violet:#7c3aed;
+  --violet-soft:#efe7ff;
+  --mist:#f4f1ff;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from {opacity:0; transform:translateY(10px);}
+  to {opacity:1;}
+}
+
+@keyframes fadeOut {
+  to {opacity:0; transform:scale(.95);}
+}
+
+@keyframes modalIn {
+  from {opacity:0; transform:scale(.95);}
+  to {opacity:1;}
+}
+
+.fade-in { animation: fadeIn .3s ease; }
+.fade-out { animation: fadeOut .2s ease forwards; }
+.modal-in { animation: modalIn .25s ease; }
+
+/* Markdown styles */
+.md b { font-weight:700; color:#111827; }
+.md i { font-style:italic; }
+.md code {
+  background:#eee;
+  padding:2px 6px;
+  border-radius:6px;
+  font-size:.85em;
+}
+
+/* Toast */
+.toast {
+  position:fixed;
+  bottom:20px;
+  left:50%;
+  transform:translateX(-50%);
+  background:#7c3aed;
+  color:white;
+  padding:8px 16px;
+  border-radius:999px;
+  opacity:0;
+  transition:.3s;
+}
+.toast.show { opacity:1; }
+
+.sidebar-chip {
+  transition:.2s ease;
+}
+
+.sidebar-chip.active {
+  background:var(--violet);
+  color:white;
+  border-color:var(--violet);
+}
+
+.sidebar-mobile {
+  overflow:hidden;
+  max-height:0;
+  opacity:0;
+  transform:translateY(-12px);
+  margin-bottom:0;
+  pointer-events:none;
+  transition:max-height .3s ease, opacity .25s ease, transform .3s ease, margin-bottom .3s ease;
+}
+
+.sidebar-mobile.open {
+  max-height:520px;
+  opacity:1;
+  transform:translateY(0);
+  margin-bottom:1.5rem;
+  pointer-events:auto;
+}
+
+@media (min-width:1024px) {
+  .sidebar-mobile {
+    overflow:visible;
+    max-height:none;
+    opacity:1;
+    transform:none;
+    margin-bottom:0;
+    pointer-events:auto;
+    transition:none;
+  }
+}
+</style>
+</head>
+
+<body class="bg-gray-50 min-h-screen text-gray-900">
+
+<!-- HEADER -->
+<header class="px-6 py-4 bg-white border-b flex justify-between">
+  <div class="flex items-center gap-3">
+    <button id="toggleSidebarButton" class="lg:hidden rounded-xl border border-violet-200 bg-white px-3 py-2 text-sm font-medium text-violet-700 shadow-sm transition hover:border-violet-300 hover:bg-violet-50">
+      Filters
+    </button>
+    <h1 class="text-2xl font-bold violet">My Notes</h1>
+  </div>
+</header>
+
+<!-- MAIN -->
+<main class="p-6">
+  <div class="max-w-7xl mx-auto grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
+    <aside id="sidebar" class="sidebar-mobile bg-white border border-violet-100 rounded-3xl p-5 shadow-sm h-fit lg:sticky lg:top-6">
+      <p class="text-sm uppercase tracking-[0.25em] text-violet-500">Overview</p>
+      <div class="mt-4 rounded-2xl bg-[var(--mist)] p-4">
+        <p class="text-sm text-gray-500">Total Notes</p>
+        <p id="totalNotes" class="text-4xl font-bold text-gray-900 mt-1">0</p>
+        <p id="tagSummary" class="text-sm text-gray-500 mt-2">No tags yet</p>
+      </div>
+
+      <div class="mt-6">
+        <div class="flex items-center justify-between gap-3">
+          <h2 class="text-lg font-semibold violet">Tags</h2>
+          <button id="clearTagFilter" class="text-sm text-gray-500 hover:text-violet-600 transition">Clear</button>
+        </div>
+        <div id="activeFilterLabel" class="text-sm text-gray-500 mt-2">Showing all notes</div>
+        <div id="tagList" class="mt-4 flex flex-wrap gap-2"></div>
+      </div>
+    </aside>
+
+    <section>
+      <div id="notesList" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4"></div>
+    </section>
+  </div>
+</main>
+
+<!-- FLOAT BUTTON -->
+<button id="openModalButton"
+class="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-violet-600 text-white text-3xl shadow-lg
+hover:bg-violet-700 active:scale-90 transition duration-200 flex items-center justify-center">
++
+</button>
+
+<!-- MODAL -->
+<div id="modal" class="fixed inset-0 bg-black/40 hidden items-center justify-center">
+
+<div id="editorBox"
+class="bg-white w-full max-w-2xl rounded-2xl shadow-xl p-4 flex flex-col modal-in transition-all duration-300">
+
+<!-- HEADER -->
+<div class="flex justify-between items-center mb-2">
+  <h2 class="font-semibold violet">Editor</h2>
+  <button id="expandBtn" aria-label="Toggle fullscreen">&#10530;</button>
+</div>
+
+<!-- TOOLBAR -->
+<div class="flex gap-2 mb-2 text-sm">
+  <button onclick="wrap('**')" class="px-2 py-1 bg-gray-100 rounded">B</button>
+  <button onclick="wrap('*')" class="px-2 py-1 bg-gray-100 rounded">I</button>
+  <button onclick="wrap('`')" class="px-2 py-1 bg-gray-100 rounded">Code</button>
+  <button onclick="wrap('\n- ')" class="px-2 py-1 bg-gray-100 rounded">List</button>
+
+  <button id="previewBtn"
+  class="ml-auto px-3 py-1 rounded bg-gray-100 transition">
+  Preview
+  </button>
+</div>
+
+<input id="noteTitle"
+class="border p-2 rounded mb-2"
+placeholder="Title"/>
+
+<textarea id="noteContent"
+class="border p-2 rounded h-40 resize-none"
+placeholder="Write your note here. Use tags like #study or #ideas."></textarea>
+
+<!-- PREVIEW -->
+<div id="preview"
+class="hidden border rounded p-2 h-40 overflow-auto text-sm md"></div>
+
+<div class="flex justify-end gap-2 mt-3">
+  <button id="cancelButton"
+  class="px-4 py-2 bg-gray-100 rounded">
+  Cancel
+  </button>
+
+  <button id="saveNoteButton"
+  class="px-4 py-2 bg-violet-600 text-white rounded">
+  Save
+  </button>
+</div>
+
+</div>
+</div>
+
+<!-- TOAST -->
+<div id="toast" class="toast">Copied!</div>
+
+<script>
+let notes = [];
+let editId = null;
+let isPreview = false;
+let isFullscreen = false;
+let activeTag = null;
+let isSidebarOpen = false;
+
+const modal = document.getElementById('modal');
+const sidebar = document.getElementById('sidebar');
+const titleInput = document.getElementById('noteTitle');
+const contentInput = document.getElementById('noteContent');
+const preview = document.getElementById('preview');
+const notesList = document.getElementById('notesList');
+const totalNotes = document.getElementById('totalNotes');
+const tagSummary = document.getElementById('tagSummary');
+const tagList = document.getElementById('tagList');
+const activeFilterLabel = document.getElementById('activeFilterLabel');
+const toggleSidebarButton = document.getElementById('toggleSidebarButton');
+
+function escapeHTML(text){
+  return text
+    .replace(/&/g,"&amp;")
+    .replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;")
+    .replace(/'/g,"&#39;");
+}
+
+/* MODAL */
+function openModal(){
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+
+  const box = document.getElementById('editorBox');
+  box.classList.remove('modal-in');
+  void box.offsetWidth;
+  box.classList.add('modal-in');
+}
+
+function closeModal(){
+  modal.classList.add('hidden');
+  titleInput.value="";
+  contentInput.value="";
+  editId=null;
+  isPreview=false;
+
+  preview.classList.add('hidden');
+  contentInput.classList.remove('hidden');
+
+  const btn=document.getElementById('previewBtn');
+  btn.textContent="Preview";
+  btn.classList.remove('bg-violet-600','text-white');
+}
+
+document.getElementById('openModalButton').onclick=openModal;
+document.getElementById('cancelButton').onclick=closeModal;
+
+/* MARKDOWN */
+function parseMD(text){
+  return escapeHTML(text)
+    .replace(/\*\*(.*?)\*\*/g,"<b>$1</b>")
+    .replace(/\*(.*?)\*/g,"<i>$1</i>")
+    .replace(/`(.*?)`/g,"<code>$1</code>")
+    .replace(/(^|\s)#([\w-]+)/g,'$1<span class="inline-block px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 text-xs font-medium">#$2</span>')
+    .replace(/\n/g,"<br>");
+}
+
+function getTags(note){
+  const matches = `${note.title} ${note.content}`.match(/#([\w-]+)/g) || [];
+  return [...new Set(matches.map(tag => tag.slice(1).toLowerCase()))];
+}
+
+function getTagStats(){
+  const counts = {};
+
+  notes.forEach(note => {
+    getTags(note).forEach(tag => {
+      counts[tag] = (counts[tag] || 0) + 1;
+    });
+  });
+
+  return Object.entries(counts).sort((a,b)=>b[1]-a[1] || a[0].localeCompare(b[0]));
+}
+
+function setActiveTag(tag){
+  activeTag = tag;
+  render();
+}
+
+function syncSidebarVisibility(){
+  const isDesktop = window.innerWidth >= 1024;
+
+  if(isDesktop){
+    sidebar.classList.add('open');
+  }else{
+    sidebar.classList.toggle('open', isSidebarOpen);
+  }
+
+  if(toggleSidebarButton){
+    toggleSidebarButton.textContent = isSidebarOpen ? "Close Filters" : "Filters";
+  }
+}
+
+function renderSidebar(){
+  const tagStats = getTagStats();
+  totalNotes.textContent = notes.length;
+  tagSummary.textContent = tagStats.length
+    ? `${tagStats.length} tag${tagStats.length===1 ? "" : "s"} tracked`
+    : "No tags yet";
+  activeFilterLabel.textContent = activeTag
+    ? `Filtering by #${activeTag}`
+    : "Showing all notes";
+
+  tagList.innerHTML = "";
+
+  const allBtn = document.createElement('button');
+  allBtn.className = `sidebar-chip px-3 py-1.5 rounded-full border text-sm ${activeTag===null ? 'active border-violet-600' : 'border-gray-200 bg-gray-50 text-gray-700'}`;
+  allBtn.textContent = `All (${notes.length})`;
+  allBtn.onclick = () => setActiveTag(null);
+  tagList.appendChild(allBtn);
+
+  if(!tagStats.length){
+    const empty = document.createElement('p');
+    empty.className = "text-sm text-gray-400";
+    empty.textContent = "Add tags like #study or #work inside a note.";
+    tagList.appendChild(empty);
+    return;
+  }
+
+  tagStats.forEach(([tag,count]) => {
+    const btn = document.createElement('button');
+    btn.className = `sidebar-chip px-3 py-1.5 rounded-full border text-sm ${activeTag===tag ? 'active border-violet-600' : 'border-gray-200 bg-white text-gray-700 hover:border-violet-300 hover:text-violet-700'}`;
+    btn.textContent = `#${tag} (${count})`;
+    btn.onclick = () => setActiveTag(tag);
+    tagList.appendChild(btn);
+  });
+}
+
+/* PREVIEW */
+document.getElementById('previewBtn').onclick=()=>{
+  isPreview=!isPreview;
+  const btn=document.getElementById('previewBtn');
+
+  if(isPreview){
+    preview.innerHTML=parseMD(contentInput.value);
+    preview.classList.remove('hidden');
+    contentInput.classList.add('hidden');
+
+    btn.textContent="Edit";
+    btn.classList.add('bg-violet-600','text-white');
+  }else{
+    preview.classList.add('hidden');
+    contentInput.classList.remove('hidden');
+
+    btn.textContent="Preview";
+    btn.classList.remove('bg-violet-600','text-white');
+  }
+};
+
+/* WRAP */
+function wrap(symbol){
+  const start=contentInput.selectionStart;
+  const end=contentInput.selectionEnd;
+  const text=contentInput.value;
+
+  contentInput.value=
+    text.substring(0,start)+
+    symbol+text.substring(start,end)+symbol+
+    text.substring(end);
+}
+
+/* SAVE */
+document.getElementById('saveNoteButton').onclick=()=>{
+  const title=titleInput.value.trim();
+  const content=contentInput.value.trim();
+  if(!title||!content) return;
+
+  if(editId){
+    const n=notes.find(n=>n.id===editId);
+    n.title=title;
+    n.content=content;
+    n.edited=new Date().toLocaleString();
+  }else{
+    notes.unshift({
+      id:Date.now(),
+      title,content,
+      created:new Date().toLocaleString(),
+      edited:null,
+      pinned:false
+    });
+  }
+
+  render();
+  closeModal();
+};
+
+document.getElementById('clearTagFilter').onclick=()=>setActiveTag(null);
+toggleSidebarButton.onclick=()=>{
+  isSidebarOpen = !isSidebarOpen;
+  syncSidebarVisibility();
+};
+window.addEventListener('resize', syncSidebarVisibility);
+
+/* TOAST */
+function showToast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),1500);
+}
+
+/* RENDER */
+function render(){
+  notesList.innerHTML="";
+  renderSidebar();
+
+  const filteredNotes = [...notes]
+    .filter(note => !activeTag || getTags(note).includes(activeTag))
+    .sort((a,b)=>b.pinned-a.pinned);
+
+  if(!filteredNotes.length){
+    const emptyState = document.createElement('div');
+    emptyState.className = "col-span-full bg-white border border-dashed border-violet-200 rounded-3xl p-10 text-center text-gray-500";
+    emptyState.innerHTML = activeTag
+      ? `No notes found for <span class="font-semibold text-violet-600">#${activeTag}</span>.`
+      : "No notes yet. Create your first one with the + button.";
+    notesList.appendChild(emptyState);
+    return;
+  }
+
+  filteredNotes.forEach(n=>{
+    const tags = getTags(n);
+
+    const el=document.createElement('div');
+    el.className=`
+    bg-white p-4 rounded-xl shadow
+    hover:shadow-lg hover:-translate-y-1
+    transition duration-200 fade-in
+    `;
+
+    el.innerHTML=`
+      <div class="flex justify-between gap-3">
+        <h3 class="font-semibold text-lg violet">${escapeHTML(n.title)}</h3>
+        <button class="pin text-xl leading-none">${n.pinned ? '&#128204;' : '&#128205;'}</button>
+      </div>
+
+      <div class="text-gray-600 mt-2 text-sm md">
+        ${parseMD(n.content)}
+      </div>
+
+      <div class="flex flex-wrap gap-2 mt-3">
+        ${tags.length ? tags.map(tag => `<button class="tag-filter px-2.5 py-1 rounded-full bg-violet-50 text-violet-700 text-xs font-medium" data-tag="${tag}">#${tag}</button>`).join('') : '<span class="text-xs text-gray-400">No tags</span>'}
+      </div>
+
+      <div class="text-xs text-gray-400 mt-2">
+        ${n.created}${n.edited ? "<br>"+n.edited : ""}
+      </div>
+
+      <div class="flex gap-2 mt-3 text-sm">
+        <button class="copy bg-gray-100 px-2 rounded">Copy</button>
+        <button class="edit bg-gray-100 px-2 rounded">Edit</button>
+        <button class="del bg-red-100 text-red-600 px-2 rounded">Delete</button>
+      </div>
+    `;
+
+    el.querySelector('.copy').onclick=()=>{
+      navigator.clipboard.writeText(n.content);
+      showToast("Copied!");
+    };
+
+    el.querySelector('.edit').onclick=()=>{
+      editId=n.id;
+      titleInput.value=n.title;
+      contentInput.value=n.content;
+      openModal();
+    };
+
+    el.querySelector('.pin').onclick=()=>{
+      n.pinned=!n.pinned;
+      render();
+    };
+
+    el.querySelectorAll('.tag-filter').forEach(btn=>{
+      btn.onclick=()=>setActiveTag(btn.dataset.tag);
+    });
+
+    el.querySelector('.del').onclick=()=>{
+      el.classList.add('fade-out');
+      setTimeout(()=>{
+        notes=notes.filter(x=>x.id!==n.id);
+        render();
+      },200);
+    };
+
+    notesList.appendChild(el);
+  });
+}
+
+/* FULLSCREEN */
+document.getElementById('expandBtn').onclick=()=>{
+  const box=document.getElementById('editorBox');
+  isFullscreen=!isFullscreen;
+
+  if(isFullscreen){
+    box.classList.remove('max-w-2xl','rounded-2xl');
+    box.classList.add('fixed','inset-0','w-full','h-full','rounded-none');
+  }else{
+    box.classList.add('max-w-2xl','rounded-2xl');
+    box.classList.remove('fixed','inset-0','w-full','h-full','rounded-none');
+  }
+};
+
+render();
+syncSidebarVisibility();
+</script>
+
+</body>
+</html>
